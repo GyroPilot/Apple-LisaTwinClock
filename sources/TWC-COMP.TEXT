@@ -1,0 +1,29 @@
+$EXEC
+${ REV D  17-Oct-2026  1.1: FNBUS (LisaFuji's) and NET added.             }
+${ REV A  10-Oct-2026  First build.                                          }
+${==========================================================================}
+${ TWC-COMP.TEXT -- compile LisaTwinClock: GLOBALS, then UNIT, then MAIN.  }
+${==========================================================================}
+F{ilemgr}D{elete}TWC/UNIT.OBJ  Y{es}
+        D{elete}TWC/GLOBALS.OBJ  Y{es}
+        D{elete}TWC/FNBUS.OBJ  Y{es}
+        D{elete}TWC/NET.OBJ  Y{es}
+        D{elete}TWC/MAIN.OBJ  Y{es}
+        Q{uit}
+${                                                                          }
+P{ascal Compile}TWC/GLOBALS.TEXT
+{no listing file - this comment-only line is the [RETURN] answer}
+TWC/GLOBALS.OBJ
+P{ascal Compile}TWC/UNIT.TEXT
+{no listing file}
+TWC/UNIT.OBJ
+P{ascal Compile}TWC/FNBUS.TEXT
+{no listing file}
+TWC/FNBUS.OBJ
+P{ascal Compile}TWC/NET.TEXT
+{no listing file}
+TWC/NET.OBJ
+P{ascal Compile}TWC/MAIN.TEXT
+{no listing file}
+TWC/MAIN.OBJ
+$ENDEXEC

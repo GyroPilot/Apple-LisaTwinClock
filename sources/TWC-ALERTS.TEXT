@@ -1,0 +1,101 @@
+; ==========================================================================
+;  TWC-ALERTS.TEXT -- phrase-file source for LisaTwinClock (419313).
+;  Compiled by the Workshop 'Alert' tool into T419313PHRASE.
+;  Comments on their OWN lines; blank lines are STRUCTURAL; alert numbers
+;  ascend and 1 and 2 are REQUIRED; each section ends with a lone 0.
+; ==========================================================================
+;
+; REV D -- 17-Oct-2026: 1.1.  Network menu is menu 3 (Set from the Network/N, three sources,
+; two speeds); Help and Version move to 4 and 5.  About says 1.1.
+; REV A -- 10-Oct-2026: first build.  Six alerts, four menus.
+; Cache bytes 4000: well above what the Alert tool suggests for a file
+; this small (below its suggestion the tool pauses for a keypress and
+; eats the next line of the MAKE exec -- the InstallTool lesson).
+; Menus are matched BY POSITION against the mi* constants in TWC-GLOBALS;
+; a '-' separator counts as a position.  Keep the two files in lockstep.
+;
+; ---- FILE HEADER ---------------------------------------------------------
+1
+4
+4000
+?
+Wait
+Stop
+Note
+Caution
+Cancel
+OK
+
+; ==== ALERTS ==============================================================
+;
+1 note alert
+LisaTwinClock could not find the message that belongs here.
+If you cannot proceed, mention the number ^N.
+
+2 stop alert
+LisaTwinClock is having trouble reaching the disk that holds the
+tool.^L^L
+Put your documents away one at a time, or press the on-off button to
+save them all.
+
+10 caution cancel alert
+Set the Lisa's clock to the date and time shown in the window?^L^L
+The year will read as the twin year.  File dates made from now on
+use it.
+
+11 note alert
+LisaTwinClock 1.1   (17 October 2026)^L^L
+Sets the Lisa's clock from today's real date.  The Lisa's clock only
+counts 1981 to 1995, so the tool uses a twin year: one with the same
+calendar as this year (2026 becomes 1987).^L^L
+With an RS-232 FujiNet on Serial B, N sets it from the network: the
+FujiNet's clock, or the web for your town or a time zone (Network menu).^L^L
+Press S to set the clock by hand, N from the network, C to show it.^L
+Tool 419313.  T. O'Connor (bmwcyclist), 2026.
+
+12 note alert
+The clock was not set.^L^L
+The window shows what happened.  If the old time was valid it has been
+put back.
+
+13 caution cancel alert
+This year has no twin year.^L^L
+The Lisa will be set to 1988.  Every date will be right, but the
+weekday names the Lisa shows will be wrong all year.  Set the clock?
+
+0
+
+; ==== MENUS ===============================================================
+1
+File/Print
+Set Aside Everything
+Set Aside "LisaTwinClock"
+-
+Save & Put Away
+
+2
+Clock
+Set Clock .../S
+Show Lisa Clock/C
+
+3
+Network
+Set from the Network/N
+-
+Use the FujiNet's Clock
+Use the Web, for Your Town
+Use the Web, for a Time Zone ...
+-
+Use 9600 baud
+Use 19200 baud
+
+4
+Help
+How to Use/H
+About Twin Years/T
+
+5
+Version
+About LisaTwinClock
+
+0

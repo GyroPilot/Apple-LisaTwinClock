@@ -1,0 +1,12 @@
+LisaTwinClock 1.1 (REV D) -- what is here and how to build it
+
+sources/TWC-MAIN.TEXT     the program: the clock page, the typed set, the network set, menus, events
+sources/TWC-GLOBALS.TEXT  unit TwcGlobals: constants, menu numbers, state, the Filer handshake
+sources/TWC-UNIT.TEXT     unit TwcUnit: twin years, the clock calls, TWINYEAR.DATA
+sources/TWC-NET.TEXT      unit TwcNet: the network time (FujiNet clock, timeapi.io), TWCNET.DATA, HOMETOWN.DATA
+sources/TWC-FNBUS.TEXT    unit FnBus: Serial B and the FujiBus protocol (LisaFuji's, unchanged)
+sources/TWC-ALERTS.TEXT   alerts and menus, Alert tool input
+sources/TWC-COMP.TEXT, TWC-LINK.TEXT, TWC-MAKE.TEXT, TWC-INSTALL.TEXT   the Workshop execs (tool 419313)
+icon/TWC-ICON.BIN         the tool icon (copy to the Lisa as TWC/ICON.BIN)
+
+BUILD: copy the sources as TWC/MAIN.TEXT ... and the icon, then  R <TWC/MAKE  and  R <TWC/INSTALL.

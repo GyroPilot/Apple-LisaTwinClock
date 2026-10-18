@@ -1,0 +1,23 @@
+$EXEC
+${ REV D  17-Oct-2026  1.1: FNBUS.OBJ and NET.OBJ.                        }
+${ REV A  10-Oct-2026  First build.                                          }
+${==========================================================================}
+${ TWC-LINK.TEXT -- link LisaTwinClock.  Intrinsic units (HwInt,           }
+${ QuickDraw, the WM units, AlertMgr, SysCall ...) are NOT named: the      }
+${ linker finds them through INTRINSIC.LIB.  Same recipe as LFU-LINK.      }
+${==========================================================================}
+F{ilemgr}D{elete}TWC/TWC.OBJ  Y{es}
+        Q{uit}
+${                                                                          }
+L{inker}TWC/MAIN.OBJ
+TWC/GLOBALS.OBJ
+TWC/UNIT.OBJ
+TWC/FNBUS.OBJ
+TWC/NET.OBJ
+IOSPASLIB.OBJ
+SYS1LIB.OBJ
+SYS2LIB.OBJ
+{end of the input list - this comment-only line is the blank answer}
+{no listing file - second blank answer}
+TWC/TWC.OBJ
+$ENDEXEC

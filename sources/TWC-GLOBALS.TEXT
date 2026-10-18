@@ -1,0 +1,186 @@
+unit TwcGlobals;
+
+{ REV D  17-Oct-2026  1.1: the Network menu (menu 3): set the clock    }
+{                      from the network, three sources, two speeds.    }
+{                      Help and Version move to 4 and 5.  esZone, ck*. }
+
+{ REV A  10-Oct-2026  First increment of LisaTwinClock (tool 419313 --   }
+{                      number PENCILLED IN, not yet reserved on the     }
+{                      LisaList2 list).  Shared state and the Filer     }
+{                      handshake, cloned from LFU-GLOBALS REV I         }
+{                      (LisaFileMover 1.1, proven on the 2/10).         }
+
+{ TWC-GLOBALS.TEXT -- LisaTwinClock.                                     }
+{ Sets the Lisa's clock from today's real date.  The Lisa's clock only  }
+{ counts 1981 to 1995, so the tool uses a TWIN YEAR: a year inside     }
+{ that range with the same calendar as the real year (2026 -> 1987).   }
+{ The twin-year arithmetic, the clock calls and the note file are in   }
+{ TWC-UNIT (unit TwcUnit), which LisaFuji will link as well.  This     }
+{ unit is state only.                                                   }
+
+INTERFACE
+
+uses (*$U UnitStd.obj *)   UnitStd,
+     (*$U UnitHz.obj *)    UnitHz,
+     (*$U Storage.obj *)   Storage,
+     (*$U QuickDraw.obj *) QuickDraw,
+     (*$U Fontmgr.obj *)   FontMgr,
+     (*$U SysCall.obj *)   SysCall,
+     (*$U wm.events.obj *) Events,
+     (*$U wm.folders.obj *) Folders,
+     (*$U wm.menus.obj *)  Menus,
+     (*$U AlertMgr.obj *)  AlertMgr,
+     (*$U WMLstd.obj *)    WMLstd,
+     (*$U WMlCrs.obj *)    WMLCrs,
+     (*$U FilerComm.obj *) FilerComm;
+
+const
+   twcVersion = 'LisaTwinClock 1.1';
+
+   winW = 600;                { the status window }
+   winH = 224;
+   maxLines = 13;             { status lines kept and drawn }
+   lineHt   = 16;
+   numCap   = 4;              { digits typed at a prompt }
+   baseYear = 2026;           { year offered when no note file exists }
+
+   { entry steps: which value the typed prompt is asking for }
+   esNone  = 0;
+   esYear  = 1;
+   esMonth = 2;
+   esDay   = 3;
+   esHour  = 4;
+   esMin   = 5;
+   esZone  = 6;               { a time zone name (REV D) }
+
+   { Menus.  A '-' separator COUNTS as an item position.                 }
+   mFile = 1;                 { "File/Print" }
+      miAsideAll = 1;
+      miAside    = 2;
+      { 3 is a separator }
+      miPutAway  = 4;
+
+   mClock = 2;                { "Clock" }
+      miSet  = 1;             { Set Clock .../S }
+      miShow = 2;             { Show Lisa Clock/C }
+
+   mNet = 3;                  { "Network" (REV D) }
+      miNetSet  = 1;          { Set from the Network/N }
+      { 2 is a separator }
+      miSrcFuji = 3;          { Use the FujiNet's Clock }
+      miSrcTown = 4;          { Use the Web, for Your Town }
+      miSrcZone = 5;          { Use the Web, for a Time Zone ... }
+      { 6 is a separator }
+      miBd9600  = 7;          { Use 9600 baud }
+      miBd19200 = 8;          { Use 19200 baud }
+
+   mHelp = 4;                 { "Help" }
+      miHelpUse  = 1;         { How to Use/H }
+      miHelpTwin = 2;         { About Twin Years/T }
+
+   mVer = 5;                  { "Version" }
+      miAbout = 1;
+
+   lastBarMenu = 5;
+   lastMenu    = 5;
+
+   alertVerNum = 1;
+   alrtSetGo  = 10;           { caution cancel: set the clock as shown? }
+   alrtAbou   = 11;           { the About box }
+   alrtFail   = 12;           { the clock was not set -- see the window }
+   alrtNoTwin = 13;           { caution cancel: no twin year this year }
+
+   { Heap: only the alert cache lives here.  4,000 integers = 8,000 bytes. }
+   maxHeap = 4000;
+
+type
+   StatStr = string[80];
+
+var
+   theEvent  : EventRecord;
+   myWindow  : WindowPtr;
+   toldToDie : boolean;
+   initing   : boolean;
+   myMenus   : array [1..lastMenu] of MenuInfo;
+   allAlerts : TAlertFile;
+   myZone    : array [0..maxHeap] of integer;
+
+   { the status pane: a short list of lines }
+   statLine  : array [1..maxLines] of StatStr;
+   statCnt   : integer;
+   quiet     : boolean;       { TRUE while a page is being built; AddLine }
+                              { then skips the repaint }
+
+   myVol     : E_Name;        { the device this tool lives on, e.g. -#12- }
+
+   { the typed prompt on the last status line }
+   promptOn  : boolean;
+   promptStep : integer;      { esYear .. esMin }
+   promptTxt : StatStr;       { digits typed so far }
+   promptLbl : StatStr;       { the label drawn before them }
+
+   { values entered in this run of Set Clock }
+   inYear    : integer;
+   inMonth   : integer;
+   inDay     : integer;
+   inHour    : integer;
+   inMin     : integer;
+
+   { defaults offered in [brackets]; -1 = none, the value must be typed }
+   dfYear    : integer;
+   dfMonth   : integer;
+   dfDay     : integer;
+   dfHour    : integer;
+   dfMin     : integer;
+
+   { the network time waiting for Y (REV D) }
+   ckMode    : integer;       { 1 = Y sets the clock }
+   ckY       : integer;
+   ckMo      : integer;
+   ckD       : integer;
+   ckH       : integer;
+   ckMi      : integer;
+   ckTwin    : integer;
+   ckDoy     : integer;
+
+procedure HandleFilerOp (var wantsOpen : boolean);
+
+
+IMPLEMENTATION
+
+procedure HandleFilerOp {var wantsOpen : boolean};
+var fx  : FilerExt;
+    err : integer;
+begin
+   wantsOpen := false;
+   GetAddParms(err, theEvent, fx);
+
+   case fx.theFlrOp of
+
+      fcNone :
+         wantsOpen := true;              { the user opened the tool }
+
+      fcResume :
+         TellFiler(err, docClosd, internalError, theEvent.who);
+
+      fcClose, fcSuspend, fcShred :
+         begin
+            myWindow := nil;
+            TellFiler(err, docClosd, allOK, theEvent.who)
+         end;
+
+      fcCopy, fcPut :
+         TellFiler(err, docNotXfered, internalError, theEvent.who);
+
+      fcDfClose :
+         TellFiler(err, dfClosed, allOK, theEvent.who);
+
+      fcTerminate :
+         toldToDie := true;
+
+      otherwise
+
+   end
+end;
+
+end.

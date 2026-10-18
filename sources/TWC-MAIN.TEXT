@@ -1,0 +1,1129 @@
+program LisaTwinClock;
+
+{ TWC-MAIN.TEXT -- LisaTwinClock  ***  1.1 REV D  ***                    }
+{ REV D  17-Oct-2026  1.1: Set from the Network (N, Network menu): the }
+{                      FujiNet's clock, or timeapi.io for your town   }
+{                      (LisaFuji's HOMETOWN.DATA) or a typed time     }
+{                      zone, over an RS-232 FujiNet on Serial B, with }
+{                      LisaFuji's FnBus unit.  NOT yet compiled.      }
+{ REV A  10-Oct-2026  First build.  NOT yet compiled on a Lisa.          }
+{                                                                        }
+{ THIS LINE IS THE VERSION CHECK.  If the About box disagrees with the  }
+{ number above, a stale file was sent.  (The authoritative constant is  }
+{ twcVersion in TWC-GLOBALS.TEXT; keep the two in step.)                 }
+{                                                                        }
+{ Tool 419313 (pencilled in; not yet reserved on the LisaList2 list).   }
+{ Skeleton: LFU-MAIN REV I (LisaFileMover 1.1) -- the callbacks, the    }
+{ status pane, the typed prompt, the event loop and Initialize are      }
+{ that code with the file lists removed.                                 }
+{                                                                        }
+{ WHAT IT DOES                                                           }
+{   Set Clock ... (S)  -- asks for today's real year, month, day, hour  }
+{                         and minute, one short line each, with the     }
+{                         last-used or current value offered in         }
+{                         brackets.  Shows "Today" and "Lisa will be    }
+{                         set to" (the twin year), asks OK / Cancel,    }
+{                         sets the clock, reads it back, and saves the  }
+{                         real year in TWINYEAR.DATA beside the tool.   }
+{   Show Lisa Clock (C) -- what the clock says, and the real date when  }
+{                         the note file matches the clock's year.       }
+{   Help (H, T)        -- how to use it; what a twin year is.           }
+{                                                                        }
+{ All calendar work, the clock calls and the note file are in TwcUnit.  }
+{ HwInt is first in the uses list, as in Apple's LisaTerminal; TwcUnit  }
+{ needs it for DateTime and SetDateTime.                                 }
+
+uses (*$U HwInt.obj *)     HwInt,
+     (*$U UnitStd.obj *)   UnitStd,
+     (*$U UnitHz.obj *)    UnitHz,
+     (*$U Storage.obj *)   Storage,
+     (*$U QuickDraw.obj *) QuickDraw,
+     (*$U Fontmgr.obj *)   FontMgr,
+     (*$U SysCall.obj *)   SysCall,
+     (*$U wm.events.obj *) Events,
+     (*$U wm.folders.obj *) Folders,
+     (*$U wm.menus.obj *)  Menus,
+     (*$U AlertMgr.obj *)  AlertMgr,
+     (*$U WMLstd.obj *)    WMLstd,
+     (*$U WMlCrs.obj *)    WMLCrs,
+     (*$U FilerComm.obj *) FilerComm,
+     (*$U TWC/GLOBALS.OBJ *) TwcGlobals,
+     (*$U TWC/UNIT.OBJ *)    TwcUnit,
+     (*$U TWC/FNBUS.OBJ *)   FnBus,
+     (*$U TWC/NET.OBJ *)     TwcNet;
+
+var
+   termErr : integer;
+
+{------------------------------------------------------------------------}
+{ The three required callbacks.                                          }
+{------------------------------------------------------------------------}
+
+function OutOfHeapSpace (hz : THz; bytesNeeded : integer) : integer;
+begin
+   OutOfHeapSpace := 0
+end;
+
+procedure AlertFailed;
+var err : integer;
+begin
+   if initing then begin
+      TellFiler(err, initFailed, noMemory, nil);
+      Halt
+   end
+end;
+
+procedure LastWishes (environPtr : p_env_blk; excepDataPtr : p_ex_data);
+begin
+   ImDying;
+   Halt
+end;
+
+{------------------------------------------------------------------------}
+{ Menus.                                                                 }
+{------------------------------------------------------------------------}
+
+procedure PutUpMenus;
+var m : integer;
+begin
+   ClearMenuBar;
+   for m := mFile to lastBarMenu do
+      InsertMenu(myMenus[m], 0);
+   DrawMenuBar
+end;
+
+{------------------------------------------------------------------------}
+{ The status pane.                                                       }
+{------------------------------------------------------------------------}
+
+procedure Clip (var big : Str255; var out : StatStr);
+{ Copy at most 80 characters.  HARDWARE LESSON (INS REV B): COPY(big,   }
+{ 1, 80) with LENGTH(big) < 80 returned an EMPTY string on the Lisa.    }
+var n : integer;
+begin
+   n := length(big);
+   if n > 80 then n := 80;
+   if n = 0 then
+      out := ''
+   else
+      out := copy(big, 1, n)
+end;
+
+procedure DrawShow;
+{ Repaint the whole status pane. }
+var fi : FontInfo;
+    i  : integer;
+begin
+   if myWindow = nil then
+      exit(DrawShow);
+   SetPort(myWindow);
+   EraseRect(myWindow^.portRect);
+   GetFontInfo(fi);
+   for i := 1 to statCnt do begin
+      MoveTo(10, 6 + (i - 1) * lineHt + fi.ascent);
+      DrawString(statLine[i])
+   end
+end;
+
+procedure AddLine (var s : StatStr);
+{ Append a line; scroll the list up when full; repaint. }
+var i : integer;
+begin
+   if statCnt < maxLines then
+      statCnt := statCnt + 1
+   else
+      for i := 1 to maxLines - 1 do
+         statLine[i] := statLine[i + 1];
+   statLine[statCnt] := s;
+   if not quiet then DrawShow
+end;
+
+procedure SetLast (var s : StatStr);
+{ Replace the last line and repaint. }
+begin
+   if statCnt = 0 then
+      AddLine(s)
+   else begin
+      statLine[statCnt] := s;
+      DrawShow
+   end
+end;
+
+procedure AddBig (var big : Str255);
+{ Clip a long string and append it. }
+var out : StatStr;
+begin
+   Clip(big, out);
+   AddLine(out)
+end;
+
+procedure LogMode;
+{ Clear the pane for a fresh run of lines. }
+begin
+   statCnt := 0
+end;
+
+procedure SayDate (var lead : StatStr; y, doy, h, mi : integer);
+{ One line: lead, then "Saturday, October 10, 1987   14:05".  y is the  }
+{ year whose calendar is used AND the year printed; doy is the day of   }
+{ that year.                                                             }
+var m, d, wd : integer;
+    part     : Str255;
+    mins     : Str255;
+    big      : Str255;
+begin
+   TwMonDay(y, doy, m, d);
+   wd := TwWkDay(y, m, d);
+   TwDayNm(wd, part);
+   big := concat(lead, part);
+   TwMonNm(m, part);
+   big := concat(big, concat(', ', part));
+   TwNum(d, part);
+   big := concat(big, concat(' ', part));
+   TwNum(y, part);
+   big := concat(big, concat(', ', part));
+   TwNum(h, part);
+   Tw2Dig(mi, mins);
+   big := concat(big, concat('   ', part));
+   big := concat(big, concat(':', mins));
+   AddBig(big)
+end;
+
+{------------------------------------------------------------------------}
+{ Show Lisa Clock.                                                       }
+{------------------------------------------------------------------------}
+
+procedure NetSrcNm (var big : Str255);
+{ The source in use and the speed, in words. }
+var part : Str255;
+begin
+   if ntSrc = ntSTown then begin
+      if ntHave then
+         big := concat('the web (timeapi.io) for ', ntTown)
+      else
+         big := 'the web for your town (no town yet: T in LisaFuji)'
+   end
+   else if ntSrc = ntSZone then begin
+      if length(ntZone) > 0 then
+         big := concat('the web (timeapi.io) for ', ntZone)
+      else
+         big := 'the web for a time zone (none typed yet)'
+   end
+   else
+      big := 'the FujiNet''s clock (its time zone is set on the FujiNet)';
+   TwNum(ntBaud, part);
+   big := concat(big, concat(', ', concat(part, ' baud')))
+end;
+
+procedure ShowClock;
+var y, doy, h, mi, s : integer;
+    ry, rm, rd, rt   : integer;
+    m, d             : integer;
+    haveNote         : boolean;
+    row              : StatStr;
+    lead             : StatStr;
+    part             : Str255;
+begin
+   promptOn := false;
+   promptStep := esNone;
+   ckMode := 0;
+   LogMode;
+   quiet := true;
+   row := twcVersion;
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   haveNote := TwLoad(myVol, ry, rm, rd, rt);
+   if TwGet(y, doy, h, mi, s) then begin
+      lead := 'Lisa clock:  ';
+      SayDate(lead, y, doy, h, mi);
+      if haveNote and (rt = y) and (ry <> y) then begin
+         TwMonDay(y, doy, m, d);
+         lead := 'Real date:   ';
+         SayDate(lead, ry, TwDayOY(ry, m, d), h, mi)
+      end
+      else begin
+         row := '(No note of the real year for this clock setting.)';
+         AddLine(row)
+      end
+   end
+   else begin
+      row := 'The Lisa clock is NOT SET: it lost power and reads 1980.';
+      AddLine(row);
+      row := 'Press S to set it.';
+      AddLine(row)
+   end;
+   row := '';
+   AddLine(row);
+   NetSrcNm(part);
+   part := concat('Network: ', part);
+   AddBig(part);
+   row := '';
+   AddLine(row);
+   row := 'S = set by hand    N = set from the network    C = show    H = help';
+   AddLine(row);
+   quiet := false;
+   DrawShow
+end;
+
+{------------------------------------------------------------------------}
+{ Help pages.  Each fills the pane once.                                 }
+{------------------------------------------------------------------------}
+
+procedure HelpUse;
+var row : StatStr;
+begin
+   LogMode;
+   quiet := true;
+   row := 'LisaTwinClock: set the Lisa''s clock from today''s real date.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'Press S (or Clock menu, Set Clock).  Type the year, month, day,';
+   AddLine(row);
+   row := 'hour and minute, pressing RETURN after each.  RETURN alone takes';
+   AddLine(row);
+   row := 'the value shown in [brackets].  X cancels.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'Hours run 0 to 23: 1 PM is 13, 9 PM is 21, midnight is 0.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'The window then shows today''s date and what the Lisa will be';
+   AddLine(row);
+   row := 'set to.  Nothing changes until you press OK.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'N sets it from the network (Network menu).  C shows it.  T: twin years.';
+   AddLine(row);
+   quiet := false;
+   DrawShow
+end;
+
+procedure HelpTwin;
+var row : StatStr;
+begin
+   LogMode;
+   quiet := true;
+   row := 'About twin years';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'The Lisa''s clock only counts the years 1981 to 1995.  It cannot';
+   AddLine(row);
+   row := 'hold 2026.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'A twin year is a year in that range with the same calendar:';
+   AddLine(row);
+   row := 'every date falls on the same weekday.  The twin of 2026 is 1987.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'So the Lisa shows the right month, day, weekday and time, and';
+   AddLine(row);
+   row := 'the year reads 1987.  Files made today carry 1987 dates.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := '2028, 2032 and 2036 have no twin.  The tool then uses 1988:';
+   AddLine(row);
+   row := 'dates are right and only the weekday names are wrong.';
+   AddLine(row);
+   quiet := false;
+   DrawShow
+end;
+
+{------------------------------------------------------------------------}
+{ Set Clock: five typed values on the last pane line, then Confirm.      }
+{------------------------------------------------------------------------}
+
+procedure LoadDefs;
+{ The values offered in brackets.  The note file gives the real year    }
+{ and the last date; a clock that is still running gives a better       }
+{ month, day, hour and minute.  -1 = nothing to offer.                  }
+var ry, rm, rd, rt   : integer;
+    y, doy, h, mi, s : integer;
+    m, d             : integer;
+begin
+   dfYear  := baseYear;
+   dfMonth := -1;
+   dfDay   := -1;
+   dfHour  := -1;
+   dfMin   := -1;
+   if TwLoad(myVol, ry, rm, rd, rt) then begin
+      dfYear  := ry;
+      dfMonth := rm;
+      dfDay   := rd
+   end;
+   if TwGet(y, doy, h, mi, s) then begin
+      TwMonDay(y, doy, m, d);
+      dfMonth := m;
+      dfDay   := d;
+      dfHour  := h;
+      dfMin   := mi
+   end
+end;
+
+procedure DrawPrompt;
+var big : Str255;
+    row : StatStr;
+begin
+   big := concat(promptLbl, concat(promptTxt, '_'));
+   Clip(big, row);
+   SetLast(row)
+end;
+
+procedure AskStep;
+{ Put up the prompt for promptStep on a new last line. }
+var what : StatStr;
+    dflt : integer;
+    part : Str255;
+    big  : Str255;
+    row  : StatStr;
+begin
+   what := 'Minute (0-59)';
+   dflt := dfMin;
+   if promptStep = esYear then begin
+      what := 'Year';
+      dflt := dfYear
+   end
+   else if promptStep = esMonth then begin
+      what := 'Month (1-12)';
+      dflt := dfMonth
+   end
+   else if promptStep = esDay then begin
+      what := 'Day';
+      dflt := dfDay
+   end
+   else if promptStep = esHour then begin
+      what := 'Hour (0-23)';
+      dflt := dfHour
+   end;
+   if dflt >= 0 then begin
+      TwNum(dflt, part);
+      big := concat(what, concat(' [', part));
+      big := concat(big, ']: ')
+   end
+   else
+      big := concat(what, ': ');
+   Clip(big, promptLbl);
+   promptTxt := '';
+   promptOn := true;
+   row := '';
+   AddLine(row);
+   DrawPrompt
+end;
+
+procedure CancelSet;
+var row : StatStr;
+begin
+   promptOn := false;
+   promptStep := esNone;
+   row := 'Cancelled.  The clock was not changed.';
+   SetLast(row)
+end;
+
+procedure Confirm;
+{ All five values are in.  Show both dates, ask, set, read back, save   }
+{ the note.                                                              }
+var twinY : integer;
+    doy   : integer;
+    rc    : integer;
+    exact : boolean;
+    go    : boolean;
+    row   : StatStr;
+    lead  : StatStr;
+    part  : Str255;
+    big   : Str255;
+begin
+   twinY := TwYear(inYear, exact);
+   if (inMonth = 2) and (inDay = 29) and (not TwLeap(twinY)) then
+      doy := TwDayOY(twinY, 3, 1)       { defensive: cannot happen }
+   else
+      doy := TwDayOY(twinY, inMonth, inDay);
+
+   row := '';
+   AddLine(row);
+   lead := 'Today:               ';
+   SayDate(lead, inYear, TwDayOY(inYear, inMonth, inDay), inHour, inMin);
+   lead := 'Lisa will be set to: ';
+   SayDate(lead, twinY, doy, inHour, inMin);
+
+   if exact then
+      go := CautionAlert(allAlerts, alrtSetGo)
+   else begin
+      TwNum(inYear, part);
+      big := concat(part, ' has no twin year: dates right, weekday names wrong.');
+      AddBig(big);
+      go := CautionAlert(allAlerts, alrtNoTwin)
+   end;
+   if not go then begin
+      row := 'Cancelled.  The clock was not changed.';
+      AddLine(row);
+      exit(Confirm)
+   end;
+
+   rc := TwSet(twinY, doy, inHour, inMin);
+   if rc = 0 then begin
+      row := 'The clock is set.  Press C to see it.';
+      AddLine(row);
+      if not TwSave(myVol, inYear, inMonth, inDay, twinY) then begin
+         TwNum(twEcode, part);
+         big := concat('(The note file was not saved: ecode ', part);
+         big := concat(big, '.)');
+         AddBig(big)
+      end
+   end
+   else begin
+      TwNum(rc, part);
+      big := concat('The clock was NOT set (result ', part);
+      big := concat(big, ').');
+      AddBig(big);
+      if rc = 2 then
+         row := 'The read-back did not match; the old time was put back.'
+      else if rc = 3 then
+         row := 'The read-back did not match; there was no old time to restore.'
+      else
+         row := 'A value was out of range; nothing was written.';
+      AddLine(row);
+      NoteAlert(allAlerts, alrtFail)
+   end
+end;
+
+procedure StepDone;
+{ RETURN at a prompt.  Empty = take the default.  A value out of range  }
+{ says so and asks again.  After the minute, Confirm.                    }
+var n, i   : integer;
+    lo, hi : integer;
+    dflt   : integer;
+    row    : StatStr;
+    part   : Str255;
+    big    : Str255;
+begin
+   promptOn := false;
+
+   dflt := dfMin;
+   lo := 0;
+   hi := 59;
+   if promptStep = esYear then begin
+      dflt := dfYear;
+      lo := twLoReal;
+      hi := twHiReal
+   end
+   else if promptStep = esMonth then begin
+      dflt := dfMonth;
+      lo := 1;
+      hi := 12
+   end
+   else if promptStep = esDay then begin
+      dflt := dfDay;
+      lo := 1;
+      hi := TwDaysIn(inYear, inMonth)
+   end
+   else if promptStep = esHour then begin
+      dflt := dfHour;
+      lo := 0;
+      hi := 23
+   end;
+
+   if length(promptTxt) = 0 then
+      n := dflt
+   else begin
+      n := 0;
+      for i := 1 to length(promptTxt) do
+         n := n * 10 + (ord(promptTxt[i]) - ord('0'))
+   end;
+
+   if (n < lo) or (n > hi) then begin
+      TwNum(lo, part);
+      big := concat('   That needs a number from ', part);
+      TwNum(hi, part);
+      big := concat(big, concat(' to ', part));
+      big := concat(big, '.');
+      Clip(big, row);
+      SetLast(row);
+      AskStep;
+      exit(StepDone)
+   end;
+
+   { accepted: the prompt line becomes the settled value }
+   TwNum(n, part);
+   big := concat(promptLbl, part);
+   Clip(big, row);
+   SetLast(row);
+
+   if promptStep = esYear then
+      inYear := n
+   else if promptStep = esMonth then
+      inMonth := n
+   else if promptStep = esDay then
+      inDay := n
+   else if promptStep = esHour then
+      inHour := n
+   else
+      inMin := n;
+
+   if promptStep < esMin then begin
+      promptStep := promptStep + 1;
+      AskStep
+   end
+   else begin
+      promptStep := esNone;
+      Confirm
+   end
+end;
+
+{------------------------------------------------------------------------}
+{ Set from the Network (REV D).  N asks the source in use for the time, }
+{ shows it and the twin-year date, and waits for Y.  The sources and    }
+{ the speed are on the Network menu and kept in TWCNET.DATA (TwcNet).   }
+{------------------------------------------------------------------------}
+
+procedure AskZone;
+{ The prompt for a time zone name; RETURN runs ZoneDone. }
+var row : StatStr;
+    big : Str255;
+begin
+   ckMode := 0;
+   LogMode;
+   quiet := true;
+   row := 'The web, for a time zone (timeapi.io)';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'Type the zone''s name, then RETURN.  Capitals count.  For example:';
+   AddLine(row);
+   row := '   America/New_York    America/Chicago    America/Denver';
+   AddLine(row);
+   row := '   America/Los_Angeles    Europe/London    Australia/Sydney';
+   AddLine(row);
+   if length(ntZone) > 0 then begin
+      big := concat('RETURN alone keeps ', ntZone);
+      AddBig(big)
+   end;
+   row := 'Clear cancels.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   promptLbl := 'Time zone: ';
+   promptTxt := '';
+   promptStep := esZone;
+   promptOn := true;
+   AddLine(row);
+   quiet := false;
+   DrawPrompt
+end;
+
+procedure NetAsk;
+{ N: the time from the network, both dates, and the Y question. }
+var rc                 : integer;
+    y, mo, d, h, mi, s : integer;
+    exact              : boolean;
+    row                : StatStr;
+    lead               : StatStr;
+    part               : Str255;
+    big                : Str255;
+begin
+   promptOn := false;
+   promptStep := esNone;
+   ckMode := 0;
+   LogMode;
+   row := 'Set the clock from the network';
+   AddLine(row);
+   NetSrcNm(part);
+   big := concat('From ', part);
+   AddBig(big);
+   row := '';
+   AddLine(row);
+   row := 'Asking the FujiNet ...';
+   AddLine(row);
+   rc := NtGet(y, mo, d, h, mi, s);
+   if rc = 4 then begin
+      AskZone;
+      exit(NetAsk)
+   end;
+   if rc = 1 then begin
+      row := 'Serial B would not open.  Quit LISACom or LisaFuji if one is open,';
+      SetLast(row);
+      row := 'or set the Serial B Connector to Serial Cable (Preferences).';
+      AddLine(row);
+      exit(NetAsk)
+   end;
+   if rc = 3 then begin
+      row := 'No town yet.  Set one in LisaFuji (T), on this disk, or choose';
+      SetLast(row);
+      row := 'another source on the Network menu.';
+      AddLine(row);
+      exit(NetAsk)
+   end;
+   if rc <> 0 then begin
+      big := concat('No time: ', ntWhy);
+      Clip(big, row);
+      SetLast(row);
+      if (ntRc = fnNoRep) or (ntRc = fnBadFr) or (ntRc = fnStall) then begin
+         row := '   Check: FujiNet on?  Cable on Serial B?  The same speed at both ends?';
+         AddLine(row)
+      end;
+      exit(NetAsk)
+   end;
+   if (y < 2024) or (y > twHiReal) or (mo < 1) or (mo > 12) or (d < 1)
+      or (d > TwDaysIn(y, mo)) or (h < 0) or (h > 23) or (mi < 0) or (mi > 59)
+   then begin
+      row := 'The time that came back is not usable: has the FujiNet got WiFi?';
+      SetLast(row);
+      exit(NetAsk)
+   end;
+   ckY := y;
+   ckMo := mo;
+   ckD := d;
+   ckH := h;
+   ckMi := mi;
+   ckTwin := TwYear(y, exact);
+   if (mo = 2) and (d = 29) and (not TwLeap(ckTwin)) then
+      ckDoy := TwDayOY(ckTwin, 3, 1)       { defensive: cannot happen }
+   else
+      ckDoy := TwDayOY(ckTwin, mo, d);
+   lead := 'Network time:        ';
+   SayDate(lead, y, TwDayOY(y, mo, d), h, mi);
+   statLine[statCnt - 1] := statLine[statCnt];    { over the Asking line }
+   statCnt := statCnt - 1;
+   lead := 'Lisa will be set to: ';
+   SayDate(lead, ckTwin, ckDoy, h, mi);
+   if not exact then begin
+      TwNum(y, part);
+      big := concat(part, ' has no twin year: dates right, weekday names wrong.');
+      AddBig(big)
+   end;
+   row := '';
+   AddLine(row);
+   row := 'Y sets the clock.  Any other key: no.';
+   AddLine(row);
+   ckMode := 1
+end;
+
+procedure NetSet;
+{ Y after NetAsk: set the clock, read it back, note the real year. }
+var rc   : integer;
+    row  : StatStr;
+    part : Str255;
+    big  : Str255;
+begin
+   ckMode := 0;
+   rc := TwSet(ckTwin, ckDoy, ckH, ckMi);
+   if rc = 0 then begin
+      row := 'The clock is set.  Press C to see it.';
+      SetLast(row);
+      if not TwSave(myVol, ckY, ckMo, ckD, ckTwin) then begin
+         TwNum(twEcode, part);
+         big := concat('(The note file was not saved: ecode ', concat(part, '.)'));
+         AddBig(big)
+      end
+   end
+   else begin
+      TwNum(rc, part);
+      big := concat('The clock was NOT set (result ', concat(part, ').'));
+      Clip(big, row);
+      SetLast(row);
+      if rc = 2 then
+         row := 'The read-back did not match; the old time was put back.'
+      else if rc = 3 then
+         row := 'The read-back did not match; there was no old time to restore.'
+      else
+         row := 'A value was out of range; nothing was written.';
+      AddLine(row)
+   end
+end;
+
+procedure NetAnswer (ch : char);
+{ The key after NetAsk. }
+var row : StatStr;
+begin
+   if (ch = 'Y') or (ch = 'y') then
+      NetSet
+   else begin
+      ckMode := 0;
+      row := 'The clock was not changed.';
+      SetLast(row)
+   end
+end;
+
+procedure ZoneDone;
+{ RETURN at the time zone prompt: keep it, use it, ask. }
+var row : StatStr;
+begin
+   promptOn := false;
+   promptStep := esNone;
+   if length(promptTxt) > 0 then
+      ntZone := promptTxt;
+   if length(ntZone) = 0 then begin
+      row := 'No time zone was typed.  Nothing changed.';
+      SetLast(row);
+      exit(ZoneDone)
+   end;
+   ntSrc := ntSZone;
+   if NtSave(myVol) then ;
+   NetAsk
+end;
+
+procedure SetSrc (n : integer);
+{ A source chosen on the Network menu: keep it and try it. }
+begin
+   ckMode := 0;
+   if n = ntSZone then begin
+      AskZone;
+      exit(SetSrc)
+   end;
+   if n = ntSTown then
+      if NtTownLd(myVol) then ;
+   ntSrc := n;
+   if NtSave(myVol) then ;
+   NetAsk
+end;
+
+procedure SetBaud (b : longint);
+{ A speed chosen on the Network menu: keep it.  It must match the       }
+{ FujiNet's own setting (baud= on its SD card).                          }
+begin
+   ckMode := 0;
+   ntBaud := b;
+   if NtSave(myVol) then ;
+   ShowClock
+end;
+
+procedure StartSet;
+var row : StatStr;
+begin
+   LoadDefs;
+   LogMode;
+   row := 'Set the clock.  Type each value, then RETURN.';
+   AddLine(row);
+   row := 'RETURN alone takes the [value] shown.  X cancels.';
+   AddLine(row);
+   promptStep := esYear;
+   AskStep
+end;
+
+procedure PromptKey (ch : char);
+{ RETURN (or ENTER) finishes the value, Backspace erases, X or Clear    }
+{ cancels, digits append up to numCap.  Everything else is ignored.     }
+var tmp : string[1];
+begin
+   if (ch = chr(13)) or (ch = chr(3)) then begin
+      if promptStep = esZone then
+         ZoneDone
+      else
+         StepDone
+   end
+   else if (ch = chr(27)) or (((ch = 'X') or (ch = 'x')) and (promptStep <> esZone)) then
+      CancelSet
+   else if ch = chr(8) then begin
+      if length(promptTxt) > 0 then begin
+         promptTxt[0] := chr(length(promptTxt) - 1);
+         DrawPrompt
+      end
+   end
+   else if promptStep = esZone then begin
+      if (ch > ' ') and (ch <= '~') and (length(promptTxt) < ntZCap) then begin
+         tmp := ' ';
+         tmp[1] := ch;
+         promptTxt := concat(promptTxt, tmp);
+         DrawPrompt
+      end
+   end
+   else if (ch >= '0') and (ch <= '9') and (length(promptTxt) < numCap)
+   then begin
+      tmp := ' ';
+      tmp[1] := ch;
+      promptTxt := concat(promptTxt, tmp);
+      DrawPrompt
+   end
+end;
+
+procedure PlainKey (ch : char);
+{ Keys without the Apple key, when no prompt is up. }
+begin
+   if ckMode = 1 then
+      NetAnswer(ch)
+   else if (ch = 'S') or (ch = 's') then
+      StartSet
+   else if (ch = 'N') or (ch = 'n') then
+      NetAsk
+   else if (ch = 'C') or (ch = 'c') then
+      ShowClock
+   else if (ch = 'H') or (ch = 'h') or (ch = '?') then
+      HelpUse
+   else if (ch = 'T') or (ch = 't') then
+      HelpTwin
+end;
+
+{------------------------------------------------------------------------}
+{ Window.                                                                }
+{------------------------------------------------------------------------}
+
+procedure doUpdateEvent (normal : boolean; window : WindowPtr);
+begin
+   if normal then BeginUpdate(window);
+   DrawShow;
+   if normal then EndUpdate(window)
+end;
+
+procedure InitNewDoc (window : WindowPtr);
+begin
+   myWindow := window;
+   TakeWindow(myWindow);
+   FolderSize(myWindow, winW, winH, false);
+   SetPort(myWindow);
+   ValidRect(myWindow^.portRect);
+
+   ShowClock;                           { opens on the clock }
+   doUpdateEvent(false, myWindow);
+
+   if activeFolder = myWindow then
+      PutUpMenus
+end;
+
+procedure DoFilerEvent;
+var wantsOpen : boolean;
+begin
+   HandleFilerOp(wantsOpen);
+   if wantsOpen then
+      InitNewDoc(theEvent.who)
+end;
+
+{------------------------------------------------------------------------}
+{ Commands and events.                                                   }
+{------------------------------------------------------------------------}
+
+procedure MenuCommand (menu, item : integer);
+var err : integer;
+begin
+   if promptOn then                     { a menu command abandons the prompt }
+      CancelSet;
+   ckMode := 0;                         { and the network question }
+   case menu of
+
+      mFile :
+         case item of
+            miAsideAll : DoFilingCmd(cmdClosAll);
+            miAside    : DoFilingCmd(cmdClose);
+            miPutAway  :
+               begin
+                  TellFiler(err, docClosd, docPutBack, myWindow);
+                  myWindow := nil
+               end;
+         end;
+
+      mClock :
+         case item of
+            miSet  : StartSet;
+            miShow : ShowClock;
+         end;
+
+      mNet :
+         case item of
+            miNetSet  : NetAsk;
+            miSrcFuji : SetSrc(ntSFuji);
+            miSrcTown : SetSrc(ntSTown);
+            miSrcZone : SetSrc(ntSZone);
+            miBd9600  : SetBaud(9600);
+            miBd19200 : SetBaud(19200);
+         end;
+
+      mHelp :
+         case item of
+            miHelpUse  : HelpUse;
+            miHelpTwin : HelpTwin;
+         end;
+
+      mVer :
+         case item of
+            miAbout : NoteAlert(allAlerts, alrtAbou);
+         end;
+
+   end
+end;
+
+procedure ProcessTheEvent;
+var theMenu, theItem : integer;
+begin
+   case theEvent.what of
+
+      buttonDown :
+         if theEvent.who = menuFolder then begin
+            MenuSelect(theEvent.where, theMenu, theItem);
+            if (theMenu <> 0) and (theItem <> 0) then
+               MenuCommand(theMenu, theItem);
+            HiLiteMenu(0)
+         end;
+
+      buttonUp :
+         ;
+
+      keyDown :
+         if (theEvent.who = myWindow) and (not theEvent.repeatKey) then begin
+            if theEvent.appleKey then begin
+               MenuKey(theEvent.ascii, theMenu, theItem);
+               if theMenu <> 0 then begin
+                  HiLiteMenu(theMenu);
+                  MenuCommand(theMenu, theItem);
+                  HiLiteMenu(0)
+               end
+            end
+            else if promptOn then
+               PromptKey(theEvent.ascii)
+            else
+               PlainKey(theEvent.ascii)
+         end;
+
+      folderActivate :
+         begin
+            TakeControl(theEvent, false, false);
+            PutUpMenus
+         end;
+
+      folderDeactivate :
+         GiveControl(theEvent);
+
+      folderUpdate :
+         if theEvent.who = myWindow then
+            doUpdateEvent(true, theEvent.who)
+         else begin
+            BeginUpdate(theEvent.who);
+            EndUpdate(theEvent.who)
+         end;
+
+      folderMoved :
+         ;
+
+      filerEvent :
+         DoFilerEvent;
+
+      abortEvent, diedEvent, diskEvent, catalogEvent, nilEvent :
+         ;
+
+      otherwise
+
+   end
+end;
+
+{------------------------------------------------------------------------}
+{ Initialize.                                                            }
+{------------------------------------------------------------------------}
+
+procedure Initialize;
+var err      : integer;
+    schedErr : integer;
+    tmp1     : string[1];
+    pcInfo   : procinfoRec;
+    excName  : t_ex_name;
+    myPrefix : TParamAlert;
+    cutAt    : integer;
+begin
+   initing := true;
+
+   excName := 'SYS_TERMINATE';
+   Declare_Excep_Hdl(err, excName, @LastWishes);
+   if err <> 0 then begin
+      TellFiler(err, initFailed, noMemory, nil);
+      halt
+   end;
+
+   toldToDie := false;
+   myWindow  := nil;
+   statCnt   := 0;
+   quiet     := false;
+   promptOn  := false;
+   promptStep := esNone;
+   promptTxt := '';
+   promptLbl := '';
+   inYear    := baseYear;
+   inMonth   := 1;
+   inDay     := 1;
+   inHour    := 0;
+   inMin     := 0;
+   dfYear    := baseYear;
+   dfMonth   := -1;
+   dfDay     := -1;
+   dfHour    := -1;
+   dfMin     := -1;
+   twEcode   := 0;
+   ckMode    := 0;
+
+   InitHeap(@myZone[0], @myZone[maxHeap], @OutOfHeapSpace);
+
+   Sched_Class(schedErr, false);
+   Info_Process(err, My_ID, pcInfo);
+   Sched_Class(schedErr, true);
+
+   cutAt := pos('}', pcInfo.progpathname);
+   if (cutAt = 0) or (cutAt > 40) then begin
+      TellFiler(err, initFailed, internalError, nil);
+      halt
+   end;
+   myPrefix := copy(pcInfo.progpathname, 1, cutAt);
+   { the device prefix alone: everything before the open-brace of the  }
+   { tool file set.  chr(123) is the open brace, built the SanName way. }
+   tmp1 := ' ';
+   tmp1[1] := chr(123);
+   cutAt := pos(tmp1, pcInfo.progpathname);
+   if (cutAt > 1) and (cutAt <= 33) then
+      myVol := copy(pcInfo.progpathname, 1, cutAt - 1)
+   else
+      myVol := '-#12-';                { defensive fallback: boot }
+   NtInit;                              { REV D: the network source }
+   if NtLoad(myVol) then ;
+   if NtTownLd(myVol) then ;
+
+   InitMP(theHeap, myPrefix, @AlertFailed, alertVerNum,
+          @myMenus[mFile], allAlerts, err);
+   if err > 0 then begin
+      TellFiler(err, initFailed, noMemory, nil);
+      halt
+   end;
+
+   InitWmlCrs(err);
+   if err <> 0 then begin
+      TellFiler(err, initFailed, noDiskSpace, nil);
+      halt
+   end;
+
+   SetPort(deskPort);
+
+   initing := false
+end;
+
+{------------------------------------------------------------------------}
+{ The main program -- two-phase loop, nothing to do when idle.           }
+{------------------------------------------------------------------------}
+
+begin { main program }
+
+   InitGraf(@thePort);
+   OpenWm;
+   Initialize;
+
+   repeat
+
+      while not (ImActive or toldToDie) do begin
+         GetEvent(theEvent);
+         ProcessTheEvent
+      end;
+
+      while ImActive and (not toldToDie) do begin
+         if EventAvail then begin
+            GetEvent(theEvent);
+            ProcessTheEvent
+         end
+         else
+            LetOthersRun
+      end;
+
+   until toldToDie;
+
+   termErr := 0
+end.

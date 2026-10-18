@@ -1,0 +1,30 @@
+$EXEC
+${ REV A  10-Oct-2026  First build.  Icon file TWCICONA.BIN -> TWC/ICON.BIN. }
+${==========================================================================}
+${ TWC-MAKE.TEXT -- build LisaTwinClock: compile, link, put the Obj and    }
+${ ICON files in place as tool 419313, compile the phrase file.  THEN run  }
+${ TWC/INSTALL (R <TWC/INSTALL).  Same two-exec recipe as PZL-MAKE REV C.  }
+${                                                                          }
+${ 419313 IS PENCILLED IN: next after 419312 (LisaFuji) in Tim's series,   }
+${ not yet reserved on the LisaList2 tool-number list.  The number appears }
+${ only in this file (three Filemgr names and the Alert output name) and   }
+${ in TWC/INSTALL.                                                          }
+${                                                                          }
+${ TWC/ICON.BIN must be on the disk before this runs.                      }
+${==========================================================================}
+$SUBMIT TWC/COMP
+$SUBMIT TWC/LINK
+${                                                                          }
+F{ilemgr}D{elete}~{T419313~}Obj
+Y{es}D{elete}~{T419313~}PHRASE
+Y{es}D{elete}~{T419313~}ICON
+Y{es}C{opy}TWC/TWC.OBJ
+~{T419313~}Obj
+C{opy}TWC/ICON.BIN
+~{T419313~}ICON
+Q{uit}
+${                                                                          }
+R{un}Alert
+TWC/ALERTS.TEXT
+~{T419313~}
+$ENDEXEC
