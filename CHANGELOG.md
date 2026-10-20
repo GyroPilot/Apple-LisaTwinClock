@@ -1,5 +1,9 @@
 # LisaTwinClock changelog
 
+## 1.1 REV E -- 20 Oct 2026 -- RELEASE BUILD (staged, not published)
+- Typing at a prompt redraws only the line you type on (no flicker on a real Lisa).
+- About says 20 October 2026; the floppy's disk name is 'LisaTwinClock 1.1' (it said 0.1).
+- Opened from its floppy in LisaEm.  Tim decides when to publish.
 ## 1.1 REV D -- 17 Oct 2026 -- built, waiting for the 2/10
 - N and the Network menu: the time from the FujiNet's clock, or from timeapi.io for your town or a typed time zone;
   9600 or 19200 baud; the choice kept in TWCNET.DATA.

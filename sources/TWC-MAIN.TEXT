@@ -125,6 +125,24 @@ begin
    end
 end;
 
+procedure DrawOne (i : integer);
+{ REV E.  Repaint pane line i only: no flash while typing (Tim, 2/10,  }
+{ 19-Oct; LisaFuji has had this since 16-Oct).                         }
+var fi : FontInfo;
+    r  : Rect;
+begin
+   if myWindow = nil then
+      exit(DrawOne);
+   SetPort(myWindow);
+   r := myWindow^.portRect;
+   r.top := 6 + (i - 1) * lineHt;
+   r.bottom := r.top + lineHt;
+   EraseRect(r);
+   GetFontInfo(fi);
+   MoveTo(10, 6 + (i - 1) * lineHt + fi.ascent);
+   DrawString(statLine[i])
+end;
+
 procedure AddLine (var s : StatStr);
 { Append a line; scroll the list up when full; repaint. }
 var i : integer;
@@ -139,13 +157,13 @@ begin
 end;
 
 procedure SetLast (var s : StatStr);
-{ Replace the last line and repaint. }
+{ Replace the last line and repaint that line only (REV E). }
 begin
    if statCnt = 0 then
       AddLine(s)
    else begin
       statLine[statCnt] := s;
-      DrawShow
+      DrawOne(statCnt)
    end
 end;
 

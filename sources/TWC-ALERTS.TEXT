@@ -7,6 +7,7 @@
 ;
 ; REV D -- 17-Oct-2026: 1.1.  Network menu is menu 3 (Set from the Network/N, three sources,
 ; two speeds); Help and Version move to 4 and 5.  About says 1.1.
+; REV E -- 20-Oct-2026: 1.1 as released: typing at a prompt repaints only that line (Tim, 2/10).
 ; REV A -- 10-Oct-2026: first build.  Six alerts, four menus.
 ; Cache bytes 4000: well above what the Alert tool suggests for a file
 ; this small (below its suggestion the tool pauses for a keypress and
@@ -44,7 +45,7 @@ The year will read as the twin year.  File dates made from now on
 use it.
 
 11 note alert
-LisaTwinClock 1.1   (17 October 2026)^L^L
+LisaTwinClock 1.1   (20 October 2026)^L^L
 Sets the Lisa's clock from today's real date.  The Lisa's clock only
 counts 1981 to 1995, so the tool uses a twin year: one with the same
 calendar as this year (2026 becomes 1987).^L^L
