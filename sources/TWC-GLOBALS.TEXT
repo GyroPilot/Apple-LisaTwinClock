@@ -35,7 +35,7 @@ uses (*$U UnitStd.obj *)   UnitStd,
      (*$U FilerComm.obj *) FilerComm;
 
 const
-   twcVersion = 'LisaTwinClock 1.1';
+   twcVersion = 'LisaTwinClock 1.2';   { REV G: 1.2 shown (REV F + the version) }
 
    winW = 600;                { the status window }
    winH = 224;

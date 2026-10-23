@@ -33,3 +33,11 @@ clock after every power cut -- with a FujiNet, one key.
 Tim O'Connor (bmwcyclist on LisaList2, GyroPilot on GitHub), with Claude (Anthropic). Lisa Pascal with the Lisa
 Workshop 3.0 for Lisa Office System 3.1; built in LisaEm and proven on a Lisa 2/10 and a LisaFPGA with a FutureVision
 Research FujiNet for RS-232.
+
+## The speed (phase 2, 23 October 2026)
+
+The tool sets the FujiNet's speed too: Network > Use 19200 baud posts the new speed to the adapter's own web page through the
+FujiNet's network device, presses its Reset button and opens the port again at the new speed (about 20 seconds;
+the adapter's WiFi must be up). At its first port open of each launch the tool probes for the speed (the saved one,
+then the other of 9600/19200) and keeps what answers, so after any one tool changes the adapter the others follow.
+The choice is kept in TWCNET.DATA beside the tool.

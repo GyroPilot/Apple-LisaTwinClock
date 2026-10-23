@@ -1,5 +1,10 @@
 # LisaTwinClock changelog
 
+## 1.2 REV F / REV G -- 22-23 Oct 2026 -- RELEASE (staged)
+- The Network menu's Use 9600 / Use 19200 baud sets the FujiNet too (its web page through the N: device, then its
+  Reset button, then the port again at the new speed); the first port open of each launch probes for the speed and
+  keeps what answers (FnFind). FnBus brought to LisaFuji's REV S level (Serial A or B ready, FnSetBd, FnFind).
+  REV G = REV F with the version shown as 1.2. LisaEm-tested the night of 22 Oct.
 ## 1.1 REV E -- 20 Oct 2026 -- RELEASE BUILD (staged, not published)
 - Typing at a prompt redraws only the line you type on (no flicker on a real Lisa).
 - About says 20 October 2026; the floppy's disk name is 'LisaTwinClock 1.1' (it said 0.1).

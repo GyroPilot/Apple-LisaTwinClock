@@ -42,6 +42,7 @@ type
 var
    ntSrc    : integer;        { the source in use }
    ntBaud   : longint;        { 9600 or 19200 }
+   ntVol    : E_Name;         { the tool's volume, from NtLoad (phase 2) }
    ntZone   : NtZStr;         { for source 3 }
    ntTown   : string[60];     { from HOMETOWN.DATA }
    ntLat    : longint;        { degrees times 10,000 }
@@ -61,6 +62,7 @@ function  NtLoad   (var vol : E_Name) : boolean;
 function  NtSave   (var vol : E_Name) : boolean;
 function  NtTownLd (var vol : E_Name) : boolean;
 function  NtGet    (var y, mo, d, h, mi, s : integer) : integer;
+procedure NtSetSp  (nb : longint; var msg : Str255);
 
 
 IMPLEMENTATION
@@ -71,6 +73,7 @@ procedure NtInit;
 begin
    ntSrc  := ntSFuji;
    ntBaud := 9600;
+   ntVol  := '';
    ntZone := '';
    ntTown := '';
    ntLat  := 0;
@@ -209,6 +212,7 @@ var f0, f1, f2, f3 : Str255;
     n              : longint;
 begin
    NtLoad := false;
+   ntVol := vol;                        { phase 2: for a save from NtGet or NtSetSp }
    if not NtRead(vol, 'TWCNET.DATA', f0, f1, f2, f3) then
       exit(NtLoad);
    if f0 <> 'TN1' then
@@ -267,6 +271,25 @@ begin
    CLOSE_OBJECT(ec, refnum);
    Sched_Class(schedErr, true);
    if ntEcode < 0 then ntEcode := 0
+end;
+
+
+procedure NtSetSp {nb : longint; var msg : Str255};
+{ Phase 2 (22-Oct): a speed chosen on the menu.  The FujiNet is set too, }
+{ through its web page (FnSetBd), restarted and followed; the choice is  }
+{ kept in the settings file.  The message says how it ended.             }
+var rc, stage : integer;
+begin
+   if nb = ntBaud then begin
+      FnSpdMsg(fnOK, 0, nb, msg);
+      exit(NtSetSp)
+   end;
+   rc := FnSetBd(ntBaud, nb, stage);
+   if stage >= 4 then
+      ntBaud := nb;                    { the FujiNet was told, or is there already }
+   if length(ntVol) > 0 then
+      if NtSave(ntVol) then ;
+   FnSpdMsg(rc, stage, ntBaud, msg)
 end;
 
 function NtTownLd {var vol : E_Name} : boolean;
@@ -463,6 +486,7 @@ var url  : Str255;
     a, b : Str255;
     rc   : integer;
     ok   : boolean;
+    old  : longint;
 begin
    y := 0;
    mo := 0;
@@ -479,6 +503,13 @@ begin
    if (ntSrc = ntSZone) and (length(ntZone) = 0) then begin
       NtGet := 4;
       exit(NtGet)
+   end;
+   if not fnFound then begin            { phase 2: which speed answers?  Once per launch. }
+      old := ntBaud;
+      if FnFind(ntBaud) = fnOK then
+         if ntBaud <> old then
+            if length(ntVol) > 0 then
+               if NtSave(ntVol) then ;
    end;
    if not FnPortUp(ntBaud) then begin
       NtGet := 1;

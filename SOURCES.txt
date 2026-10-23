@@ -1,4 +1,4 @@
-LisaTwinClock 1.1 (REV D) -- what is here and how to build it
+LisaTwinClock 1.2 (REV G) -- what is here and how to build it
 
 sources/TWC-MAIN.TEXT     the program: the clock page, the typed set, the network set, menus, events
 sources/TWC-GLOBALS.TEXT  unit TwcGlobals: constants, menu numbers, state, the Filer handshake

@@ -804,13 +804,26 @@ begin
 end;
 
 procedure SetBaud (b : longint);
-{ A speed chosen on the Network menu: keep it.  It must match the       }
-{ FujiNet's own setting (baud= on its SD card).                          }
+{ A speed chosen on the Network menu.  Phase 2 (22-Oct): the FujiNet is }
+{ set too, through its own web page, restarted and followed (NtSetSp);  }
+{ the choice is kept in TWCNET.DATA.                                     }
+var row : StatStr;
+    msg : Str255;
 begin
+   promptOn := false;
+   promptStep := esNone;
    ckMode := 0;
-   ntBaud := b;
-   if NtSave(myVol) then ;
-   ShowClock
+   LogMode;
+   row := 'Changing the speed';
+   AddLine(row);
+   row := 'Telling the FujiNet through its web page, restarting it, then opening';
+   AddLine(row);
+   row := 'the port at the new speed.  About 20 seconds ...';
+   AddLine(row);
+   NtSetSp(b, msg);
+   AddBig(msg);
+   row := 'N sets the clock from the network.';
+   AddLine(row)
 end;
 
 procedure StartSet;
