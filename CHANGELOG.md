@@ -1,5 +1,9 @@
 # LisaTwinClock changelog
 
+## 1.3 REV H -- 30 Oct 2026 -- RELEASE
+- FnBus at LisaFuji's REV Z level: the ESPFuji ESProFile mailbox as a third source of the time (FnSetVol + FnMbUp at
+  launch; the source line says "the ESProFile's clock" and no baud rate on that route). Version box: 1.3, 30 October.
+  Tim, 30 Oct: every app follows a hardware change.
 ## 1.2 REV F / REV G -- 22-23 Oct 2026 -- RELEASE (staged)
 - The Network menu's Use 9600 / Use 19200 baud sets the FujiNet too (its web page through the N: device, then its
   Reset button, then the port again at the new speed); the first port open of each launch probes for the speed and

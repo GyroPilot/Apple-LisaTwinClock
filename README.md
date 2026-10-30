@@ -8,6 +8,12 @@ Tool number **419313** in the GyroPilot series. Lisa Pascal, Workshop 3.0, Lisa 
 
 ## Status
 
+- **1.3 (REV H) -- released 30 October 2026.** Through an **ESPFuji** ESProFile as well as an RS-232 FujiNet or a LisaNet: on an ESProFile volume that runs ESPFuji
+(https://github.com/GyroPilot/ESPFuji) the tool finds the mailbox at launch and needs no serial adapter.
+  The network source line says "the ESProFile's clock" on that route (the drive's SNTP time in the zone set in
+  espfuji.ini). Same program as 1.2 otherwise. Built and opened in LisaEm; the route is the FnBus unit proven in
+  LisaFuji 1.2 on the 2/10 (CLOCK set the Lisa through the drive on 29 October), not yet run with TwinClock itself on a
+  Lisa. Release floppy `releases/LISATWINCLOCK_1_3.dc42`.
 - **1.0** -- set by hand. Tested on a LisaFPGA and a Lisa 2/10 (`releases/LISATWINCLOCK_1_0.dc42`).
 - **1.1** -- also sets the clock from the network through an RS-232 FujiNet. Built and tested in LisaEm; waiting for
   its check on the 2/10 (`releases/LISATWINCLOCK_1_1_TEST.dc42`). The sources here are 1.1 (REV D).

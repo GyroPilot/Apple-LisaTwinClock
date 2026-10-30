@@ -45,7 +45,7 @@ The year will read as the twin year.  File dates made from now on
 use it.
 
 11 note alert
-LisaTwinClock 1.1   (20 October 2026)^L^L
+LisaTwinClock 1.3   (30 October 2026)^L^L
 Sets the Lisa's clock from today's real date.  The Lisa's clock only
 counts 1981 to 1995, so the tool uses a twin year: one with the same
 calendar as this year (2026 becomes 1987).^L^L

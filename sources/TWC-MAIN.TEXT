@@ -227,10 +227,14 @@ begin
       else
          big := 'the web for a time zone (none typed yet)'
    end
+   else if fnVia = fnViaMb then         { REV H: the ESPFuji drive's clock (SNTP; timezone= in espfuji.ini) }
+      big := 'the ESProFile''s clock (ESPFuji; its time zone is set in espfuji.ini)'
    else
       big := 'the FujiNet''s clock (its time zone is set on the FujiNet)';
-   TwNum(ntBaud, part);
-   big := concat(big, concat(', ', concat(part, ' baud')))
+   if fnVia <> fnViaMb then begin        { REV H: no baud rate on the drive }
+      TwNum(ntBaud, part);
+      big := concat(big, concat(', ', concat(part, ' baud')))
+   end
 end;
 
 procedure ShowClock;
@@ -1106,6 +1110,8 @@ begin
       myVol := copy(pcInfo.progpathname, 1, cutAt - 1)
    else
       myVol := '-#12-';                { defensive fallback: boot }
+   FnSetVol(myVol);                     { REV H: where MAILBOX.DATA (an ESPFuji drive) is looked for }
+   if FnMbUp then ;                     { REV H: probe it now, so the source line is right from the start }
    NtInit;                              { REV D: the network source }
    if NtLoad(myVol) then ;
    if NtTownLd(myVol) then ;
