@@ -406,6 +406,8 @@ begin
          ntWhy := 'timeapi.io sent nothing back'
       else if fnStat = 170 then
          ntWhy := 'timeapi.io was not found (status 170): is WiFi up?'
+      else if (fnStat = 207) and (fnVia = fnViaMb) and (length(fnMbWhy) > 0) then
+         ntWhy := concat('the drive said: ', fnMbWhy)   { 2 Nov: the drive's own reason }
       else if fnStat = 207 then
          ntWhy := 'no connection to timeapi.io (status 207)'
       else

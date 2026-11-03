@@ -45,12 +45,12 @@ The year will read as the twin year.  File dates made from now on
 use it.
 
 11 note alert
-LisaTwinClock 1.3   (30 October 2026)^L^L
+LisaTwinClock 1.3   (1 November 2026)^L^L
 Sets the Lisa's clock from today's real date.  The Lisa's clock only
 counts 1981 to 1995, so the tool uses a twin year: one with the same
 calendar as this year (2026 becomes 1987).^L^L
-With an RS-232 FujiNet on Serial B, N sets it from the network: the
-FujiNet's clock, or the web for your town or a time zone (Network menu).^L^L
+With a FujiNet (RS-232 on Serial B, or ESPFuji in an ESProFile), N
+sets it from the network: its clock, or the web for a town or zone.^L^L
 Press S to set the clock by hand, N from the network, C to show it.^L
 Tool 419313.  T. O'Connor (bmwcyclist), 2026.
 

@@ -1110,11 +1110,11 @@ begin
       myVol := copy(pcInfo.progpathname, 1, cutAt - 1)
    else
       myVol := '-#12-';                { defensive fallback: boot }
-   FnSetVol(myVol);                     { REV H: where MAILBOX.DATA (an ESPFuji drive) is looked for }
-   if FnMbUp then ;                     { REV H: probe it now, so the source line is right from the start }
-   NtInit;                              { REV D: the network source }
+   NtInit;                              { REV D: the network source (calls FnInit) }
    if NtLoad(myVol) then ;
    if NtTownLd(myVol) then ;
+   FnSetVol(myVol);                     { REV J 1-Nov-2026: AFTER NtInit, whose FnInit had wiped }
+   if FnMbUp then ;                     { the ESProFile probe (2/10: N fell back to Serial B) }
 
    InitMP(theHeap, myPrefix, @AlertFailed, alertVerNum,
           @myMenus[mFile], allAlerts, err);
